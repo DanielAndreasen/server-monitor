@@ -12,9 +12,11 @@
 #     - /etc/apt, /var/lib/apt/lists, /var/lib/dpkg   host apt state (apt check)
 #     - host docker config dir        registry auth for digest checks
 #     - /var/run/fail2ban/fail2ban.sock   fail2ban malicious-access check
-#     - /proc, /sys, /var/run         host load/mem (load check), temperature
+#     - /proc/loadavg, /proc/meminfo, /sys, /var/run
+#                                       host load/mem (load check), temperature
 #                                       (thermal zones), reboot-required marker
-#                                       (issue #20 probes)
+#                                       (issue #20 probes; /proc is mounted
+#                                       file-by-file, a ro /proc breaks AppArmor)
 #     - $BACKUP_DIR (default /mnt/backups), mounted at the same path
 #                                       backup-freshness check (issue #20)
 #     - ./healthchecks.yaml           mounted at /config/healthchecks.yaml
@@ -38,7 +40,11 @@ services:
       - /var/lib/dpkg:/var/lib/dpkg:ro
       - ${HOST_DOCKER_CONFIG:-$HOME/.docker}:/root/.docker:ro
       - /var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock:ro
-      - /proc:/proc:ro
+      # /proc itself must NOT be mounted read-only: AppArmor writes
+      # /proc/self/attr/exec at container start and fails on a ro /proc.
+      # Mount only the files the load probe reads:
+      - /proc/loadavg:/proc/loadavg:ro
+      - /proc/meminfo:/proc/meminfo:ro
       - /sys:/sys:ro
       - /var/run:/var/run:ro
       - ${BACKUP_DIR:-/mnt/backups}:${BACKUP_DIR:-/mnt/backups}:ro

@@ -27,9 +27,11 @@ REQUIRED_WORKER_MOUNTS = (
     "/var/lib/apt/lists:/var/lib/apt/lists:ro",
     "/var/lib/dpkg:/var/lib/dpkg:ro",
     "/var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock:ro",
-    # issue #20: host /proc, /sys and /var/run for the load, temperature and
-    # reboot-required probes
-    "/proc:/proc:ro",
+    # issue #20: /sys and /var/run for the temperature and reboot-required
+    # probes. /proc is NOT mounted whole (a read-only /proc breaks AppArmor
+    # at container start); only the two files the load probe reads:
+    "/proc/loadavg:/proc/loadavg:ro",
+    "/proc/meminfo:/proc/meminfo:ro",
     "/sys:/sys:ro",
     "/var/run:/var/run:ro",
     # issue #20: the backup dir for the backup-freshness probe, mounted at
