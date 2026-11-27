@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/DanielAndreasen/server-monitor/actions/workflows/ci.yaml/badge.svg)](https://github.com/DanielAndreasen/server-monitor/actions/workflows/ci.yaml)
 
-Self-hosted service on the `home-server` home server that shows pending updates
+Self-hosted service on the home server that shows pending updates
 (system packages + Docker images) and runs general healthchecks, with push
 notifications when something needs attention.
 
@@ -47,7 +47,7 @@ container.
 ## Resolved questions (2026-11-27, see docs/wiki/design-decisions.md)
 
 - Docker access: read-only `/var/run/docker.sock` mount — inspection only, no privileged helper.
-- Notifications: self-hosted **Gotify** on home-server. Healthcheck failures alert immediately; pending updates go in one daily digest at 09:00.
+- Notifications: self-hosted **Gotify** on the home server. Healthcheck failures alert immediately; pending updates go in one daily digest at 09:00.
 - Healthchecks live in this service, defined in a mounted `healthchecks.yaml`.
 
 ## Development
@@ -56,14 +56,14 @@ container.
 - CI: `.github/workflows/ci.yaml` runs uv + pytest on push/PR to `master`
 - Run the stack locally: `docker compose up -d` (services: redis, worker, beat, web); secrets in `.env` (see `.env.example`)
 
-## Deploy on home-server
+## Deploy on the home server
 
-Production runs from a git clone on home-server itself, using the base compose
+Production runs from a git clone on the home server itself, using the base compose
 file plus the production override `docker-compose.prod.yml` (which keeps all
 base services and adds the worker's read-only host mounts: docker.sock,
 host apt dirs, host docker config, fail2ban socket, and `healthchecks.yaml`).
 
-1. **Clone and configure** (on home-server):
+1. **Clone and configure** (on the home server):
    ```sh
    git clone <repo-url> server-monitor && cd server-monitor
    cp .env.example .env
@@ -94,7 +94,7 @@ host apt dirs, host docker config, fail2ban socket, and `healthchecks.yaml`).
    docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
    curl -fsS http://localhost:8000/health
    ```
-   The status page is then reachable on the LAN at `http://<home-server>:8000`
+   The status page is then reachable on the LAN at `http://<server>:8000`
    (no auth in v1 — LAN only).
 
 4. **View logs**:
@@ -104,7 +104,7 @@ host apt dirs, host docker config, fail2ban socket, and `healthchecks.yaml`).
    docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f beat       # schedule firing
    ```
 
-### Live-verification checklist (run on home-server; docker is unavailable in CI/dev sandboxes)
+### Live-verification checklist (run on the home server; docker is unavailable in CI/dev sandboxes)
 
 - [ ] `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps` shows
       all four services (`redis`, `worker`, `beat`, `web`) as `Up`.
@@ -117,13 +117,13 @@ host apt dirs, host docker config, fail2ban socket, and `healthchecks.yaml`).
 - [ ] A Gotify push arrives on the owner's phone: immediately when a
       healthcheck flips ok→fail, and the daily digest at 09:00 local when
       updates are pending or checks are failing.
-- [ ] The status page `http://<home-server>:8000` shows pending apt updates
+- [ ] The status page `http://<server>:8000` shows pending apt updates
       (security flagged), outdated Docker images, and the healthcheck table.
 
 ### Secret handling
 
 - Real secrets (`GOTIFY_TOKEN`, etc.) live **only** in the uncommitted,
-  gitignored `.env` on home-server. `.env.example` carries placeholders only
+  gitignored `.env` on the home server. `.env.example` carries placeholders only
   (public-repo rule, see `docs/wiki/public-repo-rule.md`).
 - The host mounts are all **read-only** (`:ro`), including the Docker and
   fail2ban sockets — the worker inspects the host but cannot modify it.

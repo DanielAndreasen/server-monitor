@@ -1,4 +1,4 @@
-# Production overrides for deploying server-monitor on home-server (issue #9).
+# Production overrides for deploying server-monitor on the home server (issue #9).
 #
 # Use together with the base file — this file keeps every base service
 # (redis, worker, beat, web) and only adds what the checks need on the

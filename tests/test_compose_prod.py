@@ -3,9 +3,9 @@
 The dev/CI sandbox has no docker, so these tests validate
 ``docker-compose.prod.yml`` statically with PyYAML: it must keep every base
 service from ``docker-compose.yml`` and add the read-only host mounts and
-env vars the worker needs to run checks against the real host on home-server.
+env vars the worker needs to run checks against the real host on the home server.
 
-Usage on home-server (documented in the README):
+Usage on the home server (documented in the README):
 
     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 """
