@@ -120,6 +120,7 @@ def test_repo_healthchecks_yaml_loads_with_all_five_types_and_defaults() -> None
     configs = load_healthchecks(REPO_YAML)
     assert [c.type for c in configs] == [
         "http",
+        "http",
         "container",
         "disk",
         "internet",
@@ -130,6 +131,10 @@ def test_repo_healthchecks_yaml_loads_with_all_five_types_and_defaults() -> None
     assert http.url == "http://localhost:8000/health"
     assert http.expected_status == 200  # default
     assert http.timeout_s == 5.0  # default
+    # placeholder URL only (public-repo rule): no real hostnames committed
+    gotify = by_name["gotify"]
+    assert gotify.url == "https://gotify.example.com/health"
+    assert gotify.expected_status == 200
     assert by_name["redis-container"].container_name == "redis"
     disk = by_name["root-disk"]
     assert disk.path == "/"  # default
@@ -141,7 +146,7 @@ def test_repo_healthchecks_yaml_loads_with_all_five_types_and_defaults() -> None
     assert fail2ban.socket == DEFAULT_FAIL2BAN_SOCK
     assert fail2ban.max_recent_bans == 10  # default
     # names are unique (they key the snapshots)
-    assert len({c.name for c in configs}) == 5
+    assert len({c.name for c in configs}) == 6
 
 
 def test_load_healthchecks_applies_overrides_from_yaml(tmp_path: Path) -> None:
@@ -211,7 +216,7 @@ def test_load_healthchecks_default_path_is_repo_root_yaml(
     monkeypatch.chdir(REPO_ROOT)
     assert DEFAULT_CONFIG_PATH == "./healthchecks.yaml"
     configs = load_healthchecks(None)
-    assert len(configs) == 5  # the committed example file
+    assert len(configs) == 6  # the committed example file
 
 
 @pytest.mark.parametrize(

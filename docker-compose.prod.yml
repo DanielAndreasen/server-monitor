@@ -1,0 +1,41 @@
+# Production overrides for deploying server-monitor on home-server (issue #9).
+#
+# Use together with the base file — this file keeps every base service
+# (redis, worker, beat, web) and only adds what the checks need on the
+# real host:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it adds:
+#   * worker gets read-only bind mounts of the host paths the checks read:
+#     - /var/run/docker.sock          Docker Engine API (image + container checks)
+#     - /etc/apt, /var/lib/apt/lists, /var/lib/dpkg   host apt state (apt check)
+#     - host docker config dir        registry auth for digest checks
+#     - /var/run/fail2ban/fail2ban.sock   fail2ban malicious-access check
+#     - ./healthchecks.yaml           mounted at /config/healthchecks.yaml
+#   * worker env: DOCKER_SOCK and HEALTHCHECKS_CONFIG point at those mounts.
+#   * worker + beat get TZ so Celery Beat's 06:00 apt check and 09:00 digest
+#     run at local time (compose default is UTC; set TZ in .env, e.g.
+#     TZ=Europe/Copenhagen).
+#
+# The host docker config dir defaults to $HOME/.docker on the host (i.e.
+# ~/.docker); override with HOST_DOCKER_CONFIG in .env if it lives elsewhere.
+
+services:
+  worker:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/apt:/etc/apt:ro
+      - /var/lib/apt/lists:/var/lib/apt/lists:ro
+      - /var/lib/dpkg:/var/lib/dpkg:ro
+      - ${HOST_DOCKER_CONFIG:-$HOME/.docker}:/root/.docker:ro
+      - /var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock:ro
+      - ./healthchecks.yaml:/config/healthchecks.yaml:ro
+    environment:
+      - DOCKER_SOCK=/var/run/docker.sock
+      - HEALTHCHECKS_CONFIG=/config/healthchecks.yaml
+      - TZ=${TZ:-UTC}
+
+  beat:
+    environment:
+      - TZ=${TZ:-UTC}
