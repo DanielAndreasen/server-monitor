@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+
+  worker:
+    build: .
+    command: celery -A server_monitor.celery_app worker --loglevel=info
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  beat:
+    build: .
+    command: celery -A server_monitor.celery_app beat --loglevel=info
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  web:
+    build: .
+    command: uvicorn server_monitor.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
