@@ -13,3 +13,7 @@ Agreed with the owner on 2026-11-27 during a grilling session; source of truth i
 - Stack: Python 3.14 + uv, FastAPI, Celery/Beat/Redis, prometheus-client, pytest.
 - Tests: mock at the check-runner boundary (injected clients) and FastAPI routes with fake Redis; Beat scheduling and Gotify dispatch are untested glue.
 - CI: GitHub Actions (uv + pytest on push/PR to master) — issue #8. CD to server_monitor: planned follow-up after deploy (issue #9).
+
+## Progress log
+
+- 2026-11-27: Issue #2 (scaffold) landed via PR #10, merged as `c4d68f7`; tests green (2 smoke tests, Python 3.14.7). Issue #8 (CI workflow `.github/workflows/ci.yaml`) landed via PR #11, merged as `9ac865b`; first Actions run SUCCESS (run 45995358246). Frontier ticket: #3.
