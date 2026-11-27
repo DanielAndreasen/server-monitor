@@ -1,0 +1,65 @@
+# Healthcheck probes for hermod-monitor (issue #6).
+#
+# The worker loads this file every 30 minutes (Celery beat entry
+# "healthchecks-every-30min") and runs each probe listed under `checks`.
+# In production the file is mounted into the worker at
+# /config/healthchecks.yaml (compose wiring is issue #9's scope); the
+# path is read from the HEALTHCHECKS_CONFIG env var and defaults to
+# ./healthchecks.yaml.
+#
+# Every check needs a unique `name` (it becomes the Redis snapshot key
+# and the `hermod_check_up{check="..."}` metric label) and a `type`.
+# One result snapshot is written per check name on every run.
+#
+# Supported types and their options (defaults shown):
+#
+#   http:      {name, type: http, url, expected_status: 200, timeout_s: 5}
+#              ok when GET url answers with expected_status.
+#   container: {name, type: container, container_name}
+#              ok when the Docker container is running and (if it has a
+#              HEALTHCHECK) healthy; read via the read-only docker socket.
+#   disk:      {name, type: disk, path: /, warn_percent: 80, fail_percent: 90}
+#              status "warn" when used% > warn_percent, "fail" when > fail_percent.
+#   internet:  {name, type: internet, url: https://cloudflare.com/cdn-cgi/trace, timeout_s: 5}
+#              ok when the probe endpoint answers at all; "fail" only after
+#              2 consecutive failures (tracked in Redis,
+#              key hermod:consec-fail:<name>).
+#   fail2ban:  {name, type: fail2ban, socket: /var/run/fail2ban/fail2ban.sock,
+#               max_recent_bans: 10}
+#              ok when the total currently-banned count across all jails is
+#              <= max_recent_bans; queried via the read-only fail2ban socket.
+#
+# Example (all five types; replace the placeholder hosts with your own
+# services — no real addresses are committed to this public repo):
+
+checks:
+  # 1. HTTP probe of a local service's health endpoint.
+  - name: web-self
+    type: http
+    url: http://localhost:8000/health
+    expected_status: 200    # default 200
+    timeout_s: 5            # default 5
+
+  # 2. Docker container state/health (via the read-only docker.sock mount).
+  - name: redis-container
+    type: container
+    container_name: redis   # compose service name of a container on the host
+
+  # 3. Disk usage of the root filesystem.
+  - name: root-disk
+    type: disk
+    path: /                 # default /
+    warn_percent: 80        # default 80 (status "warn" above this)
+    fail_percent: 90        # default 90 (status "fail" above this)
+
+  # 4. Internet connectivity probe against a stable endpoint.
+  - name: internet
+    type: internet
+    url: https://cloudflare.com/cdn-cgi/trace   # default probe endpoint
+    timeout_s: 5                               # default 5
+
+  # 5. Malicious-access check: recent fail2ban bans across all jails.
+  - name: fail2ban
+    type: fail2ban
+    socket: /var/run/fail2ban/fail2ban.sock    # default socket path
+    max_recent_bans: 10                        # default 10

@@ -2,9 +2,9 @@
 
 Tasks live in ``hermod_monitor.tasks``, wired in via ``include`` so both
 worker and beat import them. The Beat schedule below runs the apt update
-check daily at 06:00 and the docker image digest check every 6 hours
-(beat's default timezone is UTC; a container TZ via compose is issue #9's
-scope).
+check daily at 06:00, the docker image digest check every 6 hours, and the
+healthchecks.yaml probes every 30 minutes (beat's default timezone is UTC;
+a container TZ via compose is issue #9's scope).
 """
 
 import os
@@ -29,5 +29,9 @@ app.conf.beat_schedule = {
     "docker-images-check": {
         "task": "hermod_monitor.tasks.run_docker_images_check",
         "schedule": crontab(minute=0, hour="*/6"),  # every 6 h at minute 0
+    },
+    "healthchecks-every-30min": {
+        "task": "hermod_monitor.tasks.run_healthchecks",
+        "schedule": crontab(minute="*/30"),  # every 30 minutes
     },
 }
