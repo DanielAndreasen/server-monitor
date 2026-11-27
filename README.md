@@ -1,5 +1,7 @@
 # server-monitor
 
+[![CI](https://github.com/DanielAndreasen/server-monitor/actions/workflows/ci.yaml/badge.svg)](https://github.com/DanielAndreasen/server-monitor/actions/workflows/ci.yaml)
+
 Self-hosted service on the `home-server` home server that shows pending updates
 (system packages + Docker images) and runs general healthchecks, with push
 notifications when something needs attention.
