@@ -27,6 +27,8 @@ REQUIRED_WORKER_MOUNTS = (
     "/var/lib/apt/lists:/var/lib/apt/lists:ro",
     "/var/lib/dpkg:/var/lib/dpkg:ro",
     "/var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock:ro",
+    # error-scan probe reads the host syslog
+    "/var/log:/var/log:ro",
     # issue #20: /sys and /var/run for the temperature and reboot-required
     # probes. /proc is NOT mounted whole (a read-only /proc breaks AppArmor
     # at container start); only the two files the load probe reads:
