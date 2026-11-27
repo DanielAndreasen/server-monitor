@@ -1,4 +1,7 @@
-"""Celery tasks: scheduled checks that write snapshots to the Redis store.
+"""Celery tasks: scheduled checks that write snapshots to the Redis store,
+plus the issue #7 notification tasks (ok->fail transition alerts and the
+daily 09:00 digest) that read those snapshots and dispatch via the
+``hermod_monitor.notify`` seam.
 
 Worker and beat pick these up via ``include=["hermod_monitor.tasks"]`` in
 ``celery_app.py``, where the Beat schedule lives as well. The Redis client
@@ -9,6 +12,7 @@ fail2ban clients).
 
 import os
 
+from hermod_monitor import notify
 from hermod_monitor.celery_app import app
 from hermod_monitor.checks.apt import CommandRunner, check_apt, run_apt_list
 from hermod_monitor.checks.docker_images import (
@@ -197,3 +201,24 @@ def run_healthchecks_snapshot(
 def run_healthchecks() -> list[Snapshot]:
     """Beat task (every 30 min): healthchecks.yaml probes -> per-check snapshots."""
     return run_healthchecks_snapshot(get_redis())
+
+
+@app.task
+def check_healthcheck_transitions() -> list[notify.Transition]:
+    """Beat task (every 30 min, one minute after the healthchecks run).
+
+    Compares every stored snapshot with its last-seen status in Redis
+    (``hermod:notified:<check>``) and sends one immediate Gotify alert per
+    ok->fail transition — no repeats while the check keeps failing; a
+    low-priority recovery notice on fail->ok clears the marker. See
+    ``hermod_monitor.notify.check_transitions``.
+    """
+    return notify.check_transitions(get_redis(), notify.get_notifier())
+
+
+@app.task
+def send_daily_digest() -> notify.Digest | None:
+    """Beat task (daily 09:00): one Gotify digest of pending apt updates,
+    outdated docker images and not-ok checks — sent only when something
+    needs attention. See ``hermod_monitor.notify.send_digest``."""
+    return notify.send_digest(get_redis(), notify.get_notifier())
