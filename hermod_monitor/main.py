@@ -1,15 +1,109 @@
-"""FastAPI application entrypoint (placeholder endpoints, full API in #3)."""
+"""FastAPI application: status page, /health and Prometheus /metrics.
 
-from fastapi import FastAPI
+State + web shell (issue #3): all endpoints read the check snapshots
+from the Redis snapshot store. No auth in v1; LAN-only bind is a deploy
+concern (compose/reverse proxy), not code.
+"""
+
+import html
+from datetime import datetime, timezone
+
+import redis
+from fastapi import Depends, FastAPI
+from fastapi.responses import HTMLResponse, Response
+from prometheus_client import CollectorRegistry, generate_latest
+from prometheus_client.exposition import CONTENT_TYPE_LATEST
+
+from hermod_monitor.metrics import SnapshotMetricsCollector
+from hermod_monitor.store import RedisLike, Snapshot, get_redis, list_snapshots
 
 app = FastAPI(title="hermod-monitor")
 
 
-@app.get("/")
-def root() -> dict[str, str]:
-    return {"message": "hermod-monitor placeholder"}
+def _snapshots_or_empty(client: RedisLike) -> dict[str, Snapshot]:
+    """All snapshots; empty when Redis is unreachable (shell stays up)."""
+    try:
+        return list_snapshots(client)
+    except redis.RedisError:
+        return {}
+
+
+@app.get("/", response_class=HTMLResponse)
+def status_page(client: RedisLike = Depends(get_redis)) -> HTMLResponse:
+    return HTMLResponse(render_status_page(_snapshots_or_empty(client)))
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health(client: RedisLike = Depends(get_redis)) -> dict[str, str]:
+    """200 when the app is up; reports the Redis ping alongside."""
+    try:
+        client.ping()
+        redis_status = "up"
+    except redis.RedisError:
+        redis_status = "down"
+    return {"status": "ok", "redis": redis_status}
+
+
+@app.get("/metrics")
+def metrics(client: RedisLike = Depends(get_redis)) -> Response:
+    registry = CollectorRegistry()
+    registry.register(SnapshotMetricsCollector(_snapshots_or_empty(client)))
+    return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
+
+
+def render_status_page(snapshots: dict[str, Snapshot]) -> str:
+    """Minimal human-readable status page over the stored snapshots."""
+    apt = snapshots.get("apt", {})
+    docker = snapshots.get("docker", {})
+
+    def count(snapshot: Snapshot, key: str) -> str:
+        return str(snapshot[key]) if key in snapshot else "n/a"
+
+    rows = []
+    for name, snapshot in snapshots.items():
+        status = html.escape(str(snapshot.get("status", "unknown")))
+        last_run = snapshot.get("last_run")
+        if last_run is not None:
+            stamp = datetime.fromtimestamp(float(last_run), tz=timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S UTC"
+            )
+        else:
+            stamp = "n/a"
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(name)}</td>"
+            f'<td class="{status}">{status}</td>'
+            f"<td>{html.escape(stamp)}</td>"
+            f"<td>{html.escape(str(snapshot.get('detail', '')))}</td>"
+            "</tr>"
+        )
+    table = (
+        "<table><thead><tr><th>Check</th><th>Status</th>"
+        "<th>Last run</th><th>Detail</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+        if rows
+        else "<p>No check snapshots yet.</p>"
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>hermod-monitor status</title>
+<style>
+body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #222; }}
+table {{ border-collapse: collapse; margin-top: 1rem; }}
+th, td {{ border: 1px solid #ccc; padding: 0.3rem 0.7rem; text-align: left; }}
+td.ok {{ color: #137333; font-weight: 600; }}
+td.fail {{ color: #c5221f; font-weight: 600; }}
+td.warn {{ color: #b06000; font-weight: 600; }}
+</style>
+</head>
+<body>
+<h1>hermod-monitor status</h1>
+<p>Pending apt updates: <strong>{html.escape(count(apt, 'updates_pending'))}</strong>
+(<strong>{html.escape(count(apt, 'security_updates'))}</strong> security) &middot;
+outdated Docker images: <strong>{html.escape(count(docker, 'outdated_images'))}</strong></p>
+{table}
+</body>
+</html>"""
