@@ -172,7 +172,8 @@ def run_healthchecks_snapshot(
     are injectable; ``client`` doubles as the internet check's Redis
     counter store, and ``now`` pins "now" for the time-based probes. A
     config that cannot be loaded records a single failed snapshot under
-    ``healthchecks-config`` instead of killing the beat entry.
+    ``healthchecks-config`` instead of killing the beat entry; a successful
+    load records an ``ok`` snapshot so a previous failure does not linger.
     """
     path = config_path or os.environ.get(CONFIG_ENV, DEFAULT_CONFIG_PATH)
     try:
@@ -186,6 +187,14 @@ def run_healthchecks_snapshot(
                 detail=f"healthchecks config failed to load ({path}): {exc}",
             )
         ]
+    snapshots: list[Snapshot] = [
+        write_snapshot(
+            client,
+            HEALTHCHECKS_CONFIG_CHECK,
+            "ok",
+            detail=f"config loaded ({path}): {len(configs)} checks",
+        )
+    ]
     results = run_all_probes(
         configs,
         redis=client,
@@ -199,7 +208,6 @@ def run_healthchecks_snapshot(
         log_runner=log_runner,
         now=now,
     )
-    snapshots: list[Snapshot] = []
     for result in results:
         snapshots.append(
             write_snapshot(
