@@ -595,7 +595,14 @@ def test_run_healthchecks_snapshot_writes_one_snapshot_per_check_name(
         statvfs=statvfs,
         fail2ban_client=fail2ban,
     )
-    assert [s["check"] for s in snapshots] == ["web", "redis-c", "disk", "net", "f2b"]
+    assert [s["check"] for s in snapshots] == [
+        HEALTHCHECKS_CONFIG_CHECK,
+        "web",
+        "redis-c",
+        "disk",
+        "net",
+        "f2b",
+    ]
     by_name = {s["check"]: s for s in snapshots}
     assert all(s["status"] == "ok" for s in snapshots)
     assert by_name["web"]["check_type"] == "http"
@@ -684,9 +691,9 @@ def test_run_healthchecks_snapshot_uses_env_var_for_config_path(
     snapshots = run_healthchecks_snapshot(
         fake_redis, None, statvfs=lambda p: statvfs_with_usage(60.0)
     )
-    assert [s["check"] for s in snapshots] == ["only-disk"]
-    assert snapshots[0]["status"] == "warn"  # 60% > custom warn 50%
-    assert snapshots[0]["detail"].startswith("60.0% used")
+    assert [s["check"] for s in snapshots] == [HEALTHCHECKS_CONFIG_CHECK, "only-disk"]
+    assert snapshots[1]["status"] == "warn"  # 60% > custom warn 50%
+    assert snapshots[1]["detail"].startswith("60.0% used")
 
 
 def test_celery_task_registered_on_app() -> None:
@@ -711,7 +718,14 @@ def test_celery_task_runs_with_injected_seams(
     )
     monkeypatch.setattr(os, "statvfs", statvfs)
     snapshots = run_healthchecks()  # task body runs synchronously when called
-    assert [s["check"] for s in snapshots] == ["web", "redis-c", "disk", "net", "f2b"]
+    assert [s["check"] for s in snapshots] == [
+        HEALTHCHECKS_CONFIG_CHECK,
+        "web",
+        "redis-c",
+        "disk",
+        "net",
+        "f2b",
+    ]
     assert all(s["status"] == "ok" for s in snapshots)
     assert read_snapshot(fake_redis, "web")["status"] == "ok"
 

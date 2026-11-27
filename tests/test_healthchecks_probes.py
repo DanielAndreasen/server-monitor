@@ -35,7 +35,7 @@ from server_monitor.checks.healthchecks import (
     run_healthchecks as run_all_probes,
 )
 from server_monitor.store import read_snapshot, snapshot_key
-from server_monitor.tasks import run_healthchecks_snapshot
+from server_monitor.tasks import HEALTHCHECKS_CONFIG_CHECK, run_healthchecks_snapshot
 from tests.conftest import FakeRedis
 from tests.test_healthchecks import (
     FakeContainerDocker,
@@ -679,7 +679,8 @@ def test_runner_writes_one_snapshot_per_new_probe(
         now=NOW,
     )
     assert [s["check"] for s in snapshots] == [
-        "cert", "load", "temp", "reboot", "backups", "db-port", "errors",
+        HEALTHCHECKS_CONFIG_CHECK, "cert", "load", "temp", "reboot", "backups",
+        "db-port", "errors",
     ]
     by_name = {s["check"]: s for s in snapshots}
     assert all(s["status"] == "ok" for s in snapshots)
