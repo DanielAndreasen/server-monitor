@@ -58,8 +58,12 @@ class SnapshotMetricsCollector:
             value=int(apt.get("security_updates", 0)),
         )
         docker = self._snapshots.get(DOCKER_CHECK, {})
+        outdated = docker.get("outdated_images", 0)
+        # The #5 check stores the detailed list; older/int snapshots store
+        # the bare count — the gauge reports the number either way.
+        outdated_count = len(outdated) if isinstance(outdated, list) else int(outdated)
         yield GaugeMetricFamily(
             "server_monitor_docker_images_outdated",
             "Docker images used by containers whose registry digest is newer",
-            value=int(docker.get("outdated_images", 0)),
+            value=outdated_count,
         )

@@ -8,9 +8,17 @@ functions so tests can fake both (FakeRedis + canned apt output).
 
 from server_monitor.celery_app import app
 from server_monitor.checks.apt import CommandRunner, check_apt, run_apt_list
+from server_monitor.checks.docker_images import (
+    DockerAPI,
+    RegistryFetcher,
+    check_docker_images,
+    default_docker_client,
+    fetch_manifest_digest,
+)
 from server_monitor.store import RedisLike, Snapshot, get_redis, write_snapshot
 
 APT_CHECK = "apt"
+DOCKER_IMAGES_CHECK = "docker"  # matches metrics.DOCKER_CHECK / the #3 web shell
 
 
 def run_apt_snapshot(
@@ -56,3 +64,56 @@ def run_apt_snapshot(
 def run_apt_check() -> Snapshot:
     """Beat task (daily 06:00): apt update check -> Redis snapshot."""
     return run_apt_snapshot(get_redis())
+
+
+def run_docker_images_snapshot(
+    client: RedisLike,
+    docker: DockerAPI | None = None,
+    fetch: RegistryFetcher | None = None,
+) -> Snapshot:
+    """Run the docker image digest check, store it under check name ``docker``.
+
+    Extras stored alongside status/detail: ``outdated_images`` (the list of
+    ``{image, local_digest, remote_digest}`` entries), ``outdated_images_count``
+    (consumed by /metrics and the status page), ``images_checked`` and
+    per-image registry lookup ``errors``. A failure of the check itself
+    (docker socket unreachable, ...) records a failed snapshot.
+    """
+    try:
+        result = check_docker_images(
+            docker if docker is not None else default_docker_client(),
+            fetch if fetch is not None else fetch_manifest_digest,
+        )
+    except Exception as exc:
+        # Docker API failure: record a failed check instead of letting the
+        # beat entry die.
+        return write_snapshot(
+            client, DOCKER_IMAGES_CHECK, "fail", detail=f"docker images check failed: {exc}"
+        )
+    outdated_images = [
+        {
+            "image": status.image,
+            "local_digest": status.local_digest,
+            "remote_digest": status.remote_digest,
+        }
+        for status in result.outdated
+    ]
+    detail = f"{result.outdated_count} images outdated"
+    if result.errors:
+        detail += f" ({len(result.errors)} registry lookup errors)"
+    return write_snapshot(
+        client,
+        DOCKER_IMAGES_CHECK,
+        "ok",
+        detail=detail,
+        outdated_images=outdated_images,
+        outdated_images_count=result.outdated_count,
+        images_checked=len(result.checked),
+        errors=result.errors,
+    )
+
+
+@app.task
+def run_docker_images_check() -> Snapshot:
+    """Beat task (every 6 h): docker image digest check -> Redis snapshot."""
+    return run_docker_images_snapshot(get_redis())

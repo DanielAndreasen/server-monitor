@@ -51,13 +51,51 @@ def metrics(client: RedisLike = Depends(get_redis)) -> Response:
     return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
 
+def _short_digest(digest: str) -> str:
+    """Shorten ``sha256:<hex>`` for display; empty digest -> ``none``."""
+    if not digest:
+        return "none"
+    if ":" in digest:
+        algo, hexdigest = digest.split(":", 1)
+        return f"{algo}:{hexdigest[:12]}"
+    return digest[:19]
+
+
+def render_outdated_images(snapshot: Snapshot) -> str:
+    """Table of outdated images (local vs registry digest) for the page.
+
+    Only the #5 docker check stores ``outdated_images`` as a list of
+    ``{image, local_digest, remote_digest}``; anything else renders nothing.
+    """
+    outdated = snapshot.get("outdated_images")
+    if not isinstance(outdated, list) or not outdated:
+        return ""
+    rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(str(entry.get('image', '')))}</td>"
+        f"<td>{html.escape(_short_digest(str(entry.get('local_digest', ''))))}</td>"
+        f"<td>{html.escape(_short_digest(str(entry.get('remote_digest', ''))))}</td>"
+        "</tr>"
+        for entry in outdated
+    )
+    return (
+        "<h2>Outdated Docker images</h2>"
+        "<table><thead><tr><th>Image</th><th>Local digest</th>"
+        f"<th>Registry digest</th></tr></thead><tbody>{rows}</tbody></table>"
+    )
+
+
 def render_status_page(snapshots: dict[str, Snapshot]) -> str:
     """Minimal human-readable status page over the stored snapshots."""
     apt = snapshots.get("apt", {})
     docker = snapshots.get("docker", {})
 
     def count(snapshot: Snapshot, key: str) -> str:
-        return str(snapshot[key]) if key in snapshot else "n/a"
+        if key not in snapshot:
+            return "n/a"
+        value = snapshot[key]
+        # outdated_images may be the detailed list; the summary shows its length
+        return str(len(value)) if isinstance(value, list) else str(value)
 
     rows = []
     for name, snapshot in snapshots.items():
@@ -104,6 +142,7 @@ td.warn {{ color: #b06000; font-weight: 600; }}
 <p>Pending apt updates: <strong>{html.escape(count(apt, 'updates_pending'))}</strong>
 (<strong>{html.escape(count(apt, 'security_updates'))}</strong> security) &middot;
 outdated Docker images: <strong>{html.escape(count(docker, 'outdated_images'))}</strong></p>
+{render_outdated_images(docker)}
 {table}
 </body>
 </html>"""
