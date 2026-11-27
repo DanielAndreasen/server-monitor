@@ -2,9 +2,12 @@
 
 Worker and beat pick these up via ``include=["server_monitor.tasks"]`` in
 ``celery_app.py``, where the Beat schedule lives as well. The Redis client
-and the check-runner seam are injected into the plain ``*_snapshot``
-functions so tests can fake both (FakeRedis + canned apt output).
+and the check-runner seams are injected into the plain ``*_snapshot``
+functions so tests can fake both (FakeRedis + fake http/docker/statvfs/
+fail2ban clients).
 """
+
+import os
 
 from server_monitor.celery_app import app
 from server_monitor.checks.apt import CommandRunner, check_apt, run_apt_list
@@ -15,10 +18,25 @@ from server_monitor.checks.docker_images import (
     default_docker_client,
     fetch_manifest_digest,
 )
+from server_monitor.checks.healthchecks import (
+    CONFIG_ENV,
+    DEFAULT_CONFIG_PATH,
+    ContainerInspector,
+    Fail2banClient,
+    HttpFetcher,
+    StatvfsProbe,
+    fetch_status,
+    load_healthchecks,
+)
+from server_monitor.checks.healthchecks import (
+    run_healthchecks as run_all_probes,
+)
 from server_monitor.store import RedisLike, Snapshot, get_redis, write_snapshot
 
 APT_CHECK = "apt"
 DOCKER_IMAGES_CHECK = "docker"  # matches metrics.DOCKER_CHECK / the #3 web shell
+#: Snapshot check name used when the healthchecks.yaml itself cannot be loaded.
+HEALTHCHECKS_CONFIG_CHECK = "healthchecks-config"
 
 
 def run_apt_snapshot(
@@ -117,3 +135,65 @@ def run_docker_images_snapshot(
 def run_docker_images_check() -> Snapshot:
     """Beat task (every 6 h): docker image digest check -> Redis snapshot."""
     return run_docker_images_snapshot(get_redis())
+
+
+def run_healthchecks_snapshot(
+    client: RedisLike,
+    config_path: str | None = None,
+    *,
+    fetch: HttpFetcher | None = None,
+    docker: ContainerInspector | None = None,
+    statvfs: StatvfsProbe | None = None,
+    fail2ban_client: Fail2banClient | None = None,
+) -> list[Snapshot]:
+    """Run every probe in healthchecks.yaml and store one snapshot per check
+    name (``server_monitor:snapshot:<name>``), so ``server_monitor_check_up{check}`` and
+    ``server_monitor_check_last_run_seconds{check}`` work via the #3 metrics shell.
+
+    The config path comes from ``config_path``, else the
+    ``HEALTHCHECKS_CONFIG`` env var, else ``./healthchecks.yaml`` (in
+    production the file is mounted at ``/config/healthchecks.yaml``). All
+    probe seams (http fetcher, docker client, statvfs, fail2ban client) are
+    injectable; ``client`` doubles as the internet check's Redis counter
+    store. A config that cannot be loaded records a single failed snapshot
+    under ``healthchecks-config`` instead of killing the beat entry.
+    """
+    path = config_path or os.environ.get(CONFIG_ENV, DEFAULT_CONFIG_PATH)
+    try:
+        configs = load_healthchecks(path)
+    except Exception as exc:
+        return [
+            write_snapshot(
+                client,
+                HEALTHCHECKS_CONFIG_CHECK,
+                "fail",
+                detail=f"healthchecks config failed to load ({path}): {exc}",
+            )
+        ]
+    results = run_all_probes(
+        configs,
+        redis=client,
+        fetch=fetch if fetch is not None else fetch_status,
+        docker=docker,
+        statvfs=statvfs if statvfs is not None else os.statvfs,
+        fail2ban_client=fail2ban_client,
+    )
+    snapshots: list[Snapshot] = []
+    for result in results:
+        snapshots.append(
+            write_snapshot(
+                client,
+                result.name,
+                result.status,  # "ok" | "warn" | "fail"
+                detail=result.detail,
+                check_type=result.type,
+                **result.extra,
+            )
+        )
+    return snapshots
+
+
+@app.task
+def run_healthchecks() -> list[Snapshot]:
+    """Beat task (every 30 min): healthchecks.yaml probes -> per-check snapshots."""
+    return run_healthchecks_snapshot(get_redis())
