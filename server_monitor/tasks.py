@@ -11,6 +11,7 @@ fail2ban clients).
 """
 
 import os
+from datetime import datetime
 
 from server_monitor import notify
 from server_monitor.celery_app import app
@@ -25,10 +26,14 @@ from server_monitor.checks.docker_images import (
 from server_monitor.checks.healthchecks import (
     CONFIG_ENV,
     DEFAULT_CONFIG_PATH,
+    CertFetcher,
     ContainerInspector,
     Fail2banClient,
+    HostFilesystem,
     HttpFetcher,
+    LogRunner,
     StatvfsProbe,
+    TcpConnector,
     fetch_status,
     load_healthchecks,
 )
@@ -149,6 +154,11 @@ def run_healthchecks_snapshot(
     docker: ContainerInspector | None = None,
     statvfs: StatvfsProbe | None = None,
     fail2ban_client: Fail2banClient | None = None,
+    hostfs: HostFilesystem | None = None,
+    cert_fetch: CertFetcher | None = None,
+    tcp_connector: TcpConnector | None = None,
+    log_runner: LogRunner | None = None,
+    now: datetime | None = None,
 ) -> list[Snapshot]:
     """Run every probe in healthchecks.yaml and store one snapshot per check
     name (``server_monitor:snapshot:<name>``), so ``server_monitor_check_up{check}`` and
@@ -157,10 +167,12 @@ def run_healthchecks_snapshot(
     The config path comes from ``config_path``, else the
     ``HEALTHCHECKS_CONFIG`` env var, else ``./healthchecks.yaml`` (in
     production the file is mounted at ``/config/healthchecks.yaml``). All
-    probe seams (http fetcher, docker client, statvfs, fail2ban client) are
-    injectable; ``client`` doubles as the internet check's Redis counter
-    store. A config that cannot be loaded records a single failed snapshot
-    under ``healthchecks-config`` instead of killing the beat entry.
+    probe seams (http fetcher, docker client, statvfs, fail2ban client,
+    host filesystem, TLS cert fetcher, TCP connector, journalctl runner)
+    are injectable; ``client`` doubles as the internet check's Redis
+    counter store, and ``now`` pins "now" for the time-based probes. A
+    config that cannot be loaded records a single failed snapshot under
+    ``healthchecks-config`` instead of killing the beat entry.
     """
     path = config_path or os.environ.get(CONFIG_ENV, DEFAULT_CONFIG_PATH)
     try:
@@ -181,6 +193,11 @@ def run_healthchecks_snapshot(
         docker=docker,
         statvfs=statvfs if statvfs is not None else os.statvfs,
         fail2ban_client=fail2ban_client,
+        hostfs=hostfs,
+        cert_fetch=cert_fetch,
+        tcp_connector=tcp_connector,
+        log_runner=log_runner,
+        now=now,
     )
     snapshots: list[Snapshot] = []
     for result in results:
