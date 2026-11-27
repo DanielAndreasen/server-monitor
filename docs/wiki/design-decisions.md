@@ -16,4 +16,4 @@ Agreed with the owner on 2026-11-27 during a grilling session; source of truth i
 
 ## Progress log
 
-- 2026-11-27: Issue #2 (scaffold) landed via PR #10, merged as `c4d68f7`; tests green (2 smoke tests, Python 3.14.7). Issue #8 (CI workflow `.github/workflows/ci.yaml`) landed via PR #11, merged as `9ac865b`; first Actions run SUCCESS (run 45995358246). Frontier ticket: #3.
+- 2026-11-27: Issue #2 (scaffold) landed via PR #10, merged as `c4d68f7`; tests green (2 smoke tests, Python 3.14.7). Issue #8 (CI workflow `.github/workflows/ci.yaml`) landed via PR #11, merged as `9ac865b`; first Actions run SUCCESS (run 45995358246). Issue #3 (state + web shell) landed via PR #12, merged as `dcc0cc7`, reviewer-approved, CI green, 15 tests; issue closed, branch deleted. Implement/review/merge loop per docs/wiki/workflow.md is now running: #4 in progress.
