@@ -2,10 +2,9 @@
 #
 # The worker loads this file every 30 minutes (Celery beat entry
 # "healthchecks-every-30min") and runs each probe listed under `checks`.
-# In production the file is mounted into the worker at
-# /config/healthchecks.yaml (compose wiring is issue #9's scope); the
-# path is read from the HEALTHCHECKS_CONFIG env var and defaults to
-# ./healthchecks.yaml.
+# In production, docker-compose.prod.yml mounts this file into the worker
+# read-only at /config/healthchecks.yaml; the path is read from the
+# HEALTHCHECKS_CONFIG env var and defaults to ./healthchecks.yaml.
 #
 # Every check needs a unique `name` (it becomes the Redis snapshot key
 # and the `hermod_check_up{check="..."}` metric label) and a `type`.
@@ -29,36 +28,45 @@
 #              ok when the total currently-banned count across all jails is
 #              <= max_recent_bans; queried via the read-only fail2ban socket.
 #
-# Example (all five types; replace the placeholder hosts with your own
-# services — no real addresses are committed to this public repo):
+# Example tuned for a hermod-style deployment (all five types; every
+# address is a placeholder — the public-repo rule forbids committing real
+# internal hostnames/IPs, so replace them with your own services, using
+# example.com-style URLs for anything external):
 
 checks:
-  # 1. HTTP probe of a local service's health endpoint.
+  # 1. HTTP probe of the monitor's own /health endpoint.
   - name: web-self
     type: http
     url: http://localhost:8000/health
     expected_status: 200    # default 200
     timeout_s: 5            # default 5
 
-  # 2. Docker container state/health (via the read-only docker.sock mount).
+  # 2. HTTP probe of a self-hosted service (Gotify here — placeholder URL).
+  - name: gotify
+    type: http
+    url: https://gotify.example.com/health
+    expected_status: 200
+    timeout_s: 5
+
+  # 3. Docker container state/health (via the read-only docker.sock mount).
   - name: redis-container
     type: container
     container_name: redis   # compose service name of a container on the host
 
-  # 3. Disk usage of the root filesystem.
+  # 4. Disk usage of the root filesystem.
   - name: root-disk
     type: disk
     path: /                 # default /
     warn_percent: 80        # default 80 (status "warn" above this)
     fail_percent: 90        # default 90 (status "fail" above this)
 
-  # 4. Internet connectivity probe against a stable endpoint.
+  # 5. Internet connectivity probe against a stable endpoint.
   - name: internet
     type: internet
     url: https://cloudflare.com/cdn-cgi/trace   # default probe endpoint
     timeout_s: 5                               # default 5
 
-  # 5. Malicious-access check: recent fail2ban bans across all jails.
+  # 6. Malicious-access check: recent fail2ban bans across all jails.
   - name: fail2ban
     type: fail2ban
     socket: /var/run/fail2ban/fail2ban.sock    # default socket path
