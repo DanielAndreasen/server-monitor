@@ -90,3 +90,79 @@ def test_status_page_escapes_html(client: TestClient, fake_redis: FakeRedis) -> 
     body = client.get("/").text
     assert "<script>alert(1)</script>" not in body
     assert "&lt;script&gt;" in body
+
+
+# --- issue #18: dark-theme dashboard ---------------------------------------
+
+
+def test_status_page_has_dark_theme_and_responsive_markers(client: TestClient) -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    # dark theme by default: dark background + dark color-scheme in inline CSS
+    assert "#0d1117" in body
+    assert "color-scheme: dark" in body
+    # status colors green/amber/red defined for the badges
+    assert "--ok: #3fb950" in body
+    assert "--warn: #d29922" in body
+    assert "--fail: #f85149" in body
+    # responsive: mobile media query present
+    assert "@media (max-width: 640px)" in body
+    assert 'name="viewport"' in body
+    # no external assets: styles are inline, auto-refresh via meta tag
+    assert "<style>" in body
+    assert "http://" not in body
+    assert "https://" not in body
+    assert 'http-equiv="refresh"' in body
+
+
+def test_status_page_empty_state_is_styled(client: TestClient) -> None:
+    body = client.get("/").text
+    assert "No check snapshots yet." in body
+    assert 'class="empty"' in body
+
+
+def test_status_page_renders_outdated_images_table(
+    client: TestClient, fake_redis: FakeRedis
+) -> None:
+    write_snapshot(
+        fake_redis,
+        "docker",
+        "fail",
+        detail="1 image outdated",
+        last_run=1764259300.0,
+        outdated_images=[
+            {
+                "image": "myapp/web:latest",
+                "local_digest": "sha256:" + "a" * 64,
+                "remote_digest": "sha256:" + "b" * 64,
+            }
+        ],
+    )
+    body = client.get("/").text
+    assert "Outdated Docker images" in body
+    assert "myapp/web:latest" in body
+    assert "sha256:aaaaaaaaaaaa" in body  # local digest, shortened to 12 hex chars
+    assert "sha256:bbbbbbbbbbbb" in body  # registry digest, shortened
+    assert "<strong>1</strong>" in body  # summary card counts the detailed list
+
+
+def test_status_page_escapes_outdated_image_values(
+    client: TestClient, fake_redis: FakeRedis
+) -> None:
+    write_snapshot(
+        fake_redis,
+        "docker",
+        "fail",
+        outdated_images=[
+            {
+                "image": "<script>alert(2)</script>",
+                "local_digest": "",
+                "remote_digest": "sha256:" + "c" * 64,
+            }
+        ],
+    )
+    body = client.get("/").text
+    assert "<script>alert(2)</script>" not in body
+    assert "&lt;script&gt;alert(2)&lt;/script&gt;" in body
+    assert ">none<" in body  # empty local digest renders as "none"
