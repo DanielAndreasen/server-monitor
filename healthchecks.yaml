@@ -28,6 +28,43 @@
 #              ok when the total currently-banned count across all jails is
 #              <= max_recent_bans; queried via the read-only fail2ban socket.
 #
+# Issue #20 probe types (all read-only against the host; the prod compose
+# mounts host /proc, /sys, /var/run and the backup dir read-only):
+#
+#   cert-expiry:       {name, type: cert-expiry, host, port: 443, timeout_s: 5,
+#                       warn_days: 14, fail_days: 7}
+#                      TLS handshake to host:port, read the peer cert's
+#                      notAfter; "warn" when fewer than warn_days remain,
+#                      "fail" when fewer than fail_days remain.
+#   load:              {name, type: load, loadavg_path: /proc/loadavg,
+#                       meminfo_path: /proc/meminfo, warn_load: 4.0,
+#                       fail_load: 8.0, mem_warn_percent: 80, mem_fail_percent: 90}
+#                      1-min loadavg + used memory %; reports the worse of the
+#                      load status (warn/fail above warn_load/fail_load) and
+#                      the memory status (above mem_warn_percent/mem_fail_percent).
+#   temperature:       {name, type: temperature,
+#                       sensor: /sys/class/thermal/thermal_zone0/temp,
+#                       warn_c: 70, fail_c: 85}
+#                      reads millidegrees from the sensor file; "warn"/"fail"
+#                      strictly above warn_c/fail_c.
+#   reboot-required:   {name, type: reboot-required, path: /var/run/reboot-required}
+#                      "warn" when the marker file exists, "ok" when absent.
+#   backup-freshness:  {name, type: backup-freshness, dir: /mnt/backups,
+#                       max_age_hours: 26}
+#                      newest file mtime in dir; "fail" when older than
+#                      max_age_hours (an empty/unreadable dir also fails).
+#   tcp-port:          {name, type: tcp-port, host, port, timeout_s: 5}
+#                      bare TCP connect; "fail" on refusal/timeout.
+#   error-scan:        {name, type: error-scan, log: /var/log/syslog,
+#                       since_minutes: 60, max_errors: 20, journal: false}
+#                      counts ERROR/CRITICAL lines in the last since_minutes
+#                      of the log ("fail" above max_errors); with
+#                      journal: true the lines come from
+#                      `journalctl --since` instead of the log file.
+#
+# Unknown keys inside a check entry are rejected at load time, like
+# unknown types.
+#
 # Example tuned for a home-server-style deployment (all five types; every
 # address is a placeholder — the public-repo rule forbids committing real
 # internal hostnames/IPs, so replace them with your own services, using
@@ -71,3 +108,62 @@ checks:
     type: fail2ban
     socket: /var/run/fail2ban/fail2ban.sock    # default socket path
     max_recent_bans: 10                        # default 10
+
+# --- Issue #20 probe examples (commented out: uncomment and adapt) --------
+# Placeholders only (public-repo rule): replace example.com hosts and the
+# paths with your own. These need the prod compose read-only host mounts
+# (/proc, /sys, /var/run, and BACKUP_DIR at the same path).
+#
+#  # 7. TLS certificate expiry of a self-hosted HTTPS service.
+#  - name: web-cert
+#    type: cert-expiry
+#    host: gotify.example.com
+#    port: 443            # default 443
+#    timeout_s: 5         # default 5
+#    warn_days: 14        # default 14
+#    fail_days: 7         # default 7
+#
+#  # 8. Host load average + memory usage (host /proc mounted read-only).
+#  - name: load
+#    type: load
+#    loadavg_path: /proc/loadavg     # default
+#    meminfo_path: /proc/meminfo     # default
+#    warn_load: 4.0                  # default (1-min loadavg)
+#    fail_load: 8.0                  # default
+#    mem_warn_percent: 80            # default used% (MemAvailable based)
+#    mem_fail_percent: 90            # default
+#
+#  # 9. Host temperature from a thermal zone (host /sys mounted read-only).
+#  - name: cpu-temp
+#    type: temperature
+#    sensor: /sys/class/thermal/thermal_zone0/temp   # default
+#    warn_c: 70     # default
+#    fail_c: 85     # default
+#
+#  # 10. Pending reboot after kernel/package updates (host /var/run mounted).
+#  - name: reboot-required
+#    type: reboot-required
+#    path: /var/run/reboot-required   # default
+#
+#  # 11. Backup freshness (host backup dir mounted read-only at the same
+#  #     path; set BACKUP_DIR in .env to override the default /mnt/backups).
+#  - name: backups
+#    type: backup-freshness
+#    dir: /mnt/backups    # default
+#    max_age_hours: 26    # default
+#
+#  # 12. Bare TCP port check (e.g. a database port), placeholder host.
+#  - name: db-port
+#    type: tcp-port
+#    host: db.internal.example
+#    port: 5432
+#    timeout_s: 5         # default 5
+#
+#  # 13. ERROR/CRITICAL scan of the syslog (host /var/log mounted read-only
+#  #     if you point `log` there; or journal: true for journalctl).
+#  - name: error-scan
+#    type: error-scan
+#    log: /var/log/syslog     # default
+#    since_minutes: 60        # default
+#    max_errors: 20           # default
+#    journal: false           # default; true -> journalctl --since

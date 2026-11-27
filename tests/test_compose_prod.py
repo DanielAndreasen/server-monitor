@@ -27,8 +27,19 @@ REQUIRED_WORKER_MOUNTS = (
     "/var/lib/apt/lists:/var/lib/apt/lists:ro",
     "/var/lib/dpkg:/var/lib/dpkg:ro",
     "/var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock:ro",
+    # issue #20: host /proc, /sys and /var/run for the load, temperature and
+    # reboot-required probes
+    "/proc:/proc:ro",
+    "/sys:/sys:ro",
+    "/var/run:/var/run:ro",
+    # issue #20: the backup dir for the backup-freshness probe, mounted at
+    # the same path inside the worker, path parameterized via BACKUP_DIR
+    "${BACKUP_DIR:-/mnt/backups}:${BACKUP_DIR:-/mnt/backups}:ro",
     "./healthchecks.yaml:/config/healthchecks.yaml:ro",
 )
+
+#: Backup-dir mount: source and target are the same env-parameterized path.
+BACKUP_DIR_MOUNT_TARGET = ":${BACKUP_DIR:-/mnt/backups}:ro"
 
 #: Host docker config dir mount: source is parameterized via HOST_DOCKER_CONFIG
 #: (defaulting to the host's ~/.docker), target is /root/.docker:ro.
@@ -93,6 +104,23 @@ def test_worker_mounts_host_docker_config_read_only() -> None:
     # parameterized via HOST_DOCKER_CONFIG, defaulting to the host's ~/.docker
     assert source.startswith("${HOST_DOCKER_CONFIG")
     assert "$HOME/.docker" in source or "~/.docker" in source
+
+
+def test_worker_mounts_backup_dir_read_only_at_the_same_path() -> None:
+    """Issue #20: the backup-freshness probe reads the host backup dir at the
+    same path inside the worker, parameterized via BACKUP_DIR (default
+    /mnt/backups)."""
+    prod = _load(PROD_COMPOSE)
+    volumes = [str(v) for v in prod["services"]["worker"].get("volumes", [])]
+    backup_mounts = [v for v in volumes if v.endswith(BACKUP_DIR_MOUNT_TARGET)]
+    assert len(backup_mounts) == 1, (
+        f"expected exactly one backup-dir mount ending in "
+        f"{BACKUP_DIR_MOUNT_TARGET!r}, got {backup_mounts!r}"
+    )
+    source = backup_mounts[0][: -len(BACKUP_DIR_MOUNT_TARGET)]
+    # source is the same env expression as the target: same path on both sides
+    assert source == "${BACKUP_DIR:-/mnt/backups}"
+    assert backup_mounts[0].endswith(":ro")
 
 
 def test_worker_environment_points_at_the_mounts() -> None:

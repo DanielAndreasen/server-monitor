@@ -12,6 +12,11 @@
 #     - /etc/apt, /var/lib/apt/lists, /var/lib/dpkg   host apt state (apt check)
 #     - host docker config dir        registry auth for digest checks
 #     - /var/run/fail2ban/fail2ban.sock   fail2ban malicious-access check
+#     - /proc, /sys, /var/run         host load/mem (load check), temperature
+#                                       (thermal zones), reboot-required marker
+#                                       (issue #20 probes)
+#     - $BACKUP_DIR (default /mnt/backups), mounted at the same path
+#                                       backup-freshness check (issue #20)
 #     - ./healthchecks.yaml           mounted at /config/healthchecks.yaml
 #   * worker env: DOCKER_SOCK and HEALTHCHECKS_CONFIG point at those mounts.
 #   * worker + beat get TZ so Celery Beat's 06:00 apt check and 09:00 digest
@@ -20,6 +25,9 @@
 #
 # The host docker config dir defaults to $HOME/.docker on the host (i.e.
 # ~/.docker); override with HOST_DOCKER_CONFIG in .env if it lives elsewhere.
+# The backup dir defaults to /mnt/backups on the host; override with
+# BACKUP_DIR in .env if your backups live elsewhere (it is mounted at the
+# same path inside the worker, read-only).
 
 services:
   worker:
@@ -30,6 +38,10 @@ services:
       - /var/lib/dpkg:/var/lib/dpkg:ro
       - ${HOST_DOCKER_CONFIG:-$HOME/.docker}:/root/.docker:ro
       - /var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock:ro
+      - /proc:/proc:ro
+      - /sys:/sys:ro
+      - /var/run:/var/run:ro
+      - ${BACKUP_DIR:-/mnt/backups}:${BACKUP_DIR:-/mnt/backups}:ro
       - ./healthchecks.yaml:/config/healthchecks.yaml:ro
     environment:
       - DOCKER_SOCK=/var/run/docker.sock
