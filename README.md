@@ -4,7 +4,7 @@ Self-hosted service on the `hermod` home server that shows pending updates
 (system packages + Docker images) and runs general healthchecks, with push
 notifications when something needs attention.
 
-Status: **idea outline only** — no implementation yet.
+Status: **implementation started** — scaffold + CI are on `master` (issues #2, #8); the remaining tickets are tracked as sub-issues of #1. Design decisions live in `docs/wiki/design-decisions.md`.
 
 ## General idea
 
@@ -42,9 +42,14 @@ container.
 - ntfy.sh or Gotify for push notifications
 - pytest
 
-## Open questions
+## Resolved questions (2026-11-27, see docs/wiki/design-decisions.md)
 
-- Read-only access to the Docker socket vs. a small privileged helper for
-  image inspection.
-- Notification channel: ntfy.sh (simplest) vs. self-hosted Gotify.
-- Whether healthchecks live in this service or a separate probe.
+- Docker access: read-only `/var/run/docker.sock` mount — inspection only, no privileged helper.
+- Notifications: self-hosted **Gotify** on hermod. Healthcheck failures alert immediately; pending updates go in one daily digest at 09:00.
+- Healthchecks live in this service, defined in a mounted `healthchecks.yaml`.
+
+## Development
+
+- `uv sync && uv run pytest` — local dev/test (Python 3.14 via uv)
+- CI: `.github/workflows/ci.yaml` runs uv + pytest on push/PR to `master`
+- Run the stack: `docker compose up -d` (services: redis, worker, beat, web); secrets in `.env` (see `.env.example`)
