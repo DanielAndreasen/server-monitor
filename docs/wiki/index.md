@@ -8,7 +8,7 @@ Tribal knowledge for the server-monitor goal. Historical record: every claim is 
 
 ## Preferences
 
-- (none yet)
+- [public-repo-rule.md](public-repo-rule.md) — repo will go public: no confidential info may leak (owner decision, 2026-11-27)
 
 ## Recurring problems
 
