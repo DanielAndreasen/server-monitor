@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 .env
 uv.lock.tmp
+
+# local prod config with real hostnames/IPs (public-repo rule)
+healthchecks.prod.yaml
